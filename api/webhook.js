@@ -1,6 +1,6 @@
 let users = {};
 
-const CS_NUMBER = "62857XXXXXXXX"; // ganti dengan nomor CS kamu
+const CS_NUMBER = "6285718539571"; // ganti dengan nomor CS kamu
 
 export default async function handler(req, res) {
   if (req.method === "POST") {
