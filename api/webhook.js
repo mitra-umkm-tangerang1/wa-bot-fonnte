@@ -5,6 +5,40 @@ export default async function handler(req, res) {
     console.log("Pesan masuk:", data);
 
     const sender = data.sender;
+    const pesan = (data.pesan || data.message || "").toLowerCase();
+
+    let reply = "";
+
+    // MENU UTAMA
+    if (pesan.includes("halo") || pesan.includes("hai") || pesan.includes("menu")) {
+      reply =
+`Selamat datang di Bems Store
+
+Silakan pilih layanan:
+1. Mobile Legends
+2. Free Fire
+3. PUBG
+4. Roblox
+
+Ketik angka yang ingin dibeli.`;
+    }
+
+    // PILIH ML
+    else if (pesan === "1") {
+      reply =
+`Topup Mobile Legends
+
+Silakan kirim ID + Server
+Contoh: 12345678(1234)`;
+    }
+
+    // DEFAULT
+    else {
+      reply =
+`Pesan diterima.
+
+Ketik *menu* untuk melihat daftar layanan.`;
+    }
 
     // Kirim balasan ke WhatsApp
     await fetch("https://api.fonnte.com/send", {
@@ -15,7 +49,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         target: sender,
-        message: "Halo, pesan kamu sudah masuk ke bot 🤖"
+        message: reply
       })
     });
 
