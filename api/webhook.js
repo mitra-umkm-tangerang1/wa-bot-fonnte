@@ -1,144 +1,218 @@
+import md5 from "md5";
+
 let users = {};
 
-const CS_NUMBER = "6285718539571"; // nomor CS
+const CS_NUMBER = "6285718539571";
+const PROFIT = 3000;
 
-// Daftar nominal & harga (bisa kamu ubah)
-const pricelist = {
-  "1": [ // Mobile Legends
-    { kode: "1", nama: "86 DM", harga: 20000 },
-    { kode: "2", nama: "172 DM", harga: 39000 },
-    { kode: "3", nama: "257 DM", harga: 58000 }
-  ],
-  "2": [ // Free Fire
-    { kode: "1", nama: "70 DM", harga: 10000 },
-    { kode: "2", nama: "140 DM", harga: 19000 }
-  ],
-  "3": [ // PUBG
-    { kode: "1", nama: "60 UC", harga: 15000 }
-  ],
-  "4": [ // Roblox
-    { kode: "1", nama: "80 Robux", harga: 16000 }
-  ]
+// ===== KATEGORI ECOMMERCE =====
+const CATEGORY_MAP = {
+  "1": "PULSA",
+  "2": "DATA",
+  "3": "PLN",
+  "4": "E-MONEY",
+  "5": "GAMES"
 };
 
+// ================= MAIN =================
 export default async function handler(req, res) {
-  if (req.method === "POST") {
-    const data = req.body;
+  if (req.method !== "POST") return res.send("OK");
 
-    const sender = data.sender;
-    const pesan = (data.pesan || data.message || "").toLowerCase().trim();
+  const { sender, pesan, message } = req.body;
+  const text = (pesan || message || "").toLowerCase().trim();
 
-    console.log("Pesan masuk:", data);
+  if (!users[sender]) users[sender] = { step: "idle" };
 
-    if (!users[sender]) users[sender] = { step: "idle" };
-
-    // ===== MENU (balas hanya jika diminta) =====
-    if (pesan === "halo" || pesan === "hai" || pesan === "menu") {
-      users[sender] = { step: "pilih_game" };
-
-      await kirim(sender,
-`Selamat datang di Bems Store
-
-Silakan pilih layanan:
-1. Mobile Legends
-2. Free Fire
-3. PUBG
-4. Roblox
-
-Ketik angka.`);
-      return res.status(200).json({ status: "ok" });
-    }
-
-    // ===== PILIH GAME =====
-    if (users[sender].step === "pilih_game" && ["1","2","3","4"].includes(pesan)) {
-      users[sender].game = pesan;
-      users[sender].step = "input_id";
-
-      await kirim(sender,
-`Topup ${getNamaGame(pesan)}
-
-Kirim ID + Server
-Contoh:
-12345678(1234)`);
-      return res.status(200).json({ status: "ok" });
-    }
-
-    // ===== INPUT ID =====
-    if (users[sender].step === "input_id") {
-      users[sender].idgame = pesan;
-      users[sender].step = "pilih_nominal";
-
-      const list = pricelist[users[sender].game]
-        .map(i => `${i.kode}. ${i.nama} - Rp${i.harga}`)
-        .join("\n");
-
-      await kirim(sender,
-`Pilih nominal:
-
-${list}
-
-Ketik angka.`);
-      return res.status(200).json({ status: "ok" });
-    }
-
-    // ===== PILIH NOMINAL =====
-    if (users[sender].step === "pilih_nominal") {
-      const item = pricelist[users[sender].game].find(i => i.kode === pesan);
-      if (!item) return res.status(200).json({ status: "ok" }); // diam jika salah
-
-      users[sender].nominal = item;
-
-      const namaGame = getNamaGame(users[sender].game);
-
-      // Kirim ke CS
-      await kirim(CS_NUMBER,
-`ORDER MASUK
-
-Game: ${namaGame}
-Nominal: ${item.nama}
-Harga: Rp${item.harga}
-ID: ${users[sender].idgame}
-No Pembeli: ${sender}`);
-
-      // Balas pembeli
-      await kirim(sender,
-`Pesanan diterima
-
-${namaGame}
-${item.nama}
-Rp${item.harga}
-
-Admin akan proses.`);
-
-      users[sender].step = "idle";
-      return res.status(200).json({ status: "ok" });
-    }
-
-    // ===== HEMAT EKSTREM: selain kondisi di atas BOT DIAM =====
-    return res.status(200).json({ status: "ok" });
+  // ===== APPROVE =====
+  if (sender === CS_NUMBER && text.startsWith("#approve")) {
+    const target = text.split(" ")[1];
+    await prosesDigiflazz(target);
+    return res.json({ ok: true });
   }
 
-  res.status(200).send("Webhook aktif");
+  // ===== MENU UTAMA =====
+  if (["menu","halo","hai"].includes(text)) {
+    users[sender] = { step: "pilih_kategori" };
+
+    await kirim(sender,
+`BEMS STORE – Layanan Digital Resmi
+
+Kami melayani pengisian Pulsa, Data, PLN, E-Money, dan Games
+menggunakan sistem otomatis Digiflazz (server terpercaya & realtime).
+Transaksi cepat, aman, dan transparan.
+
+Silakan pilih layanan di bawah ini:
+
+1. Pulsa
+2. Paket Data
+3. PLN / Token
+4. E-Money
+5. Games
+
+Ketik angka kategori`);
+    return res.json({ ok: true });
+  }
+
+  // ===== PILIH KATEGORI =====
+  if (users[sender].step === "pilih_kategori") {
+    users[sender].kategori = text;
+    users[sender].step = "input_tujuan";
+
+    await kirim(sender,
+`Masukkan tujuan:
+
+Pulsa/Data : Nomor HP
+PLN : IDPEL / Meter
+E-money : Nomor
+Games : ID + Server`);
+    return res.json({ ok: true });
+  }
+
+  // ===== INPUT TUJUAN =====
+  if (users[sender].step === "input_tujuan") {
+    users[sender].tujuan = text;
+    users[sender].step = "pilih_produk";
+
+    const list = await getProdukDigiflazz(users[sender].kategori);
+    users[sender].produkList = list;
+
+    await kirim(sender,
+list.slice(0,20).map((p,i)=>`${i+1}. ${p.nama} - Rp${p.hargaJual}`).join("\n")
++ `\n\nKetik nomor produk`);
+    return res.json({ ok: true });
+  }
+
+  // ===== PILIH PRODUK =====
+  if (users[sender].step === "pilih_produk") {
+    const p = users[sender].produkList[text-1];
+    if (!p) return res.json({ ok:true });
+
+    users[sender].order = {
+      ...p,
+      tujuan: users[sender].tujuan
+    };
+
+    await kirim(sender, invoicePembeli(users[sender].order));
+
+    if (process.env.QRIS_IMAGE_URL) {
+      await kirimGambar(sender, process.env.QRIS_IMAGE_URL, "Scan QRIS");
+    }
+
+    await kirim(CS_NUMBER, invoiceCS(sender, users[sender].order));
+
+    users[sender].step = "menunggu";
+    return res.json({ ok:true });
+  }
+
+  return res.json({ ok:true });
 }
 
-function getNamaGame(kode) {
-  if (kode === "1") return "Mobile Legends";
-  if (kode === "2") return "Free Fire";
-  if (kode === "3") return "PUBG";
-  if (kode === "4") return "Roblox";
-  return "-";
-}
+// ================= DIGIFLAZZ =================
+async function getProdukDigiflazz(kategori) {
+  const brand = CATEGORY_MAP[kategori];
 
-async function kirim(target, message) {
-  await fetch("https://api.fonnte.com/send", {
-    method: "POST",
-    headers: {
-      "Authorization": process.env.FONNTE_TOKEN,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-      target,
-      message
+  const res = await fetch("https://api.digiflazz.com/v1/price-list", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({
+      cmd:"prepaid",
+      username:process.env.DIGIFLAZZ_USERNAME,
+      sign:md5(process.env.DIGIFLAZZ_USERNAME + process.env.DIGIFLAZZ_KEY + "pricelist")
     })
+  });
+
+  const json = await res.json();
+
+  return json.data
+    .filter(p =>
+      p.category?.toUpperCase().includes(brand) ||
+      p.brand?.toUpperCase().includes(brand)
+    )
+    .map(p=>({
+      sku:p.buyer_sku_code,
+      nama:p.product_name,
+      hargaModal:p.price,
+      hargaJual:p.price + PROFIT
+    }));
+}
+
+async function prosesDigiflazz(target){
+  const o = users[target].order;
+  const ref = "INV"+Date.now();
+
+  await fetch("https://api.digiflazz.com/v1/transaction",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({
+      username:process.env.DIGIFLAZZ_USERNAME,
+      buyer_sku_code:o.sku,
+      customer_no:o.tujuan,
+      ref_id:ref,
+      sign:md5(process.env.DIGIFLAZZ_USERNAME + process.env.DIGIFLAZZ_KEY + ref)
+    })
+  });
+
+  await kirim(target, strukPembeli(o, ref));
+  users[target]={ step:"idle" };
+}
+
+// ================= STRUK =================
+function strukPembeli(o, ref){
+return `STRUK PEMBAYARAN
+
+Produk: ${o.nama}
+Tujuan: ${o.tujuan}
+Ref: ${ref}
+
+Status: BERHASIL ✅
+Terima kasih 🙏`;
+}
+
+function invoicePembeli(o){
+return `INVOICE
+
+${o.nama}
+Tujuan: ${o.tujuan}
+
+Total: Rp${o.hargaJual}
+
+BCA 0750184219
+DANA 085694766782
+a.n ROHMAN BRAMANTO`;
+}
+
+function invoiceCS(sender,o){
+return `ORDER
+
+${sender}
+${o.nama}
+Tujuan: ${o.tujuan}
+
+Modal: ${o.hargaModal}
+Jual: ${o.hargaJual}
+
+#approve ${sender}`;
+}
+
+// ================= SEND =================
+async function kirim(target,message){
+  await fetch("https://api.fonnte.com/send",{
+    method:"POST",
+    headers:{
+      Authorization:process.env.FONNTE_TOKEN,
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify({ target,message })
+  });
+}
+
+async function kirimGambar(target,url,caption){
+  await fetch("https://api.fonnte.com/send",{
+    method:"POST",
+    headers:{
+      Authorization:process.env.FONNTE_TOKEN,
+      "Content-Type":"application/json"
+    },
+    body:JSON.stringify({ target,url,caption })
   });
 }
