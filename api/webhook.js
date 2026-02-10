@@ -173,10 +173,10 @@ await new Promise(r => setTimeout(r, 3000));
 // 3️⃣ Kirim QRIS (media)
 if (process.env.QRIS_IMAGE_URL) {
   await kirimGambar(
-    sender,
-    process.env.QRIS_IMAGE_URL,
-    "Scan QRIS untuk bayar"
-  );
+  sender,
+  "https://i.ibb.co/7QpKsCX/qris.png",
+  "TES"
+);
 }
 
 // 4️⃣ Delay lagi 2 detik (ANTI silent-fail)
