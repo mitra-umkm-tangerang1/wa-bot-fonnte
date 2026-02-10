@@ -149,18 +149,11 @@ list.slice(0,20).map((p,i)=>`${i+1}. ${p.nama} - Rp${p.hargaJual}`).join("\n")
 
     await kirim(sender, invoicePembeli(users[sender].order));
 
-// TEST MANUAL QRIS
-await kirimGambar(
-  "6285718539571", // ganti nomor kamu sendiri
-  "https://drive.google.com/uc?export=download&id=1MqQYfi--PLqUpfzMj1ZtPQfGZ7Es3MXK",
-  "TES QRIS"
-);
-
 console.log("QRIS_IMAGE_URL =", process.env.QRIS_IMAGE_URL);
 
 if (process.env.QRIS_IMAGE_URL) {
   console.log("KIRIM QRIS DIMULAI");
-  await new Promise(r => setTimeout(r, 1500));
+  await new Promise(r => setTimeout(r, 1500)); // penting
   await kirimGambar(
     sender,
     process.env.QRIS_IMAGE_URL,
