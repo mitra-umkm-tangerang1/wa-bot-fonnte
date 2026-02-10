@@ -149,12 +149,23 @@ list.slice(0,20).map((p,i)=>`${i+1}. ${p.nama} - Rp${p.hargaJual}`).join("\n")
 
     await kirim(sender, invoicePembeli(users[sender].order));
 
-    if (process.env.QRIS_IMAGE_URL) {
-      await kirimGambar(sender, process.env.QRIS_IMAGE_URL, "Scan QRIS untuk bayar");
-    }
+console.log("QRIS_IMAGE_URL =", process.env.QRIS_IMAGE_URL);
 
-    await kirim(CS_NUMBER, invoiceCS(sender, users[sender].order));
-    return res.json({ ok:true });
+if (process.env.QRIS_IMAGE_URL) {
+  console.log("KIRIM QRIS DIMULAI");
+  await new Promise(r => setTimeout(r, 1500)); // penting
+  await kirimGambar(
+    sender,
+    process.env.QRIS_IMAGE_URL,
+    "Scan QRIS untuk bayar"
+  );
+  console.log("KIRIM QRIS SELESAI");
+} else {
+  console.log("QRIS_IMAGE_URL TIDAK ADA");
+}
+
+await kirim(CS_NUMBER, invoiceCS(sender, users[sender].order));
+return res.json({ ok:true });
   }
 
   return res.json({ ok:true });
