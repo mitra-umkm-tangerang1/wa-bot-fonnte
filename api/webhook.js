@@ -291,17 +291,16 @@ async function kirim(target,message){
   });
 }
 
-async function kirimGambar(target,url,caption){
+async function kirimGambar(target, url, caption){
   await fetch("https://api.fonnte.com/send",{
     method:"POST",
     headers:{
-      Authorization:process.env.FONNTE_TOKEN,
-      "Content-Type":"application/json"
+      Authorization: process.env.FONNTE_TOKEN
     },
-    body:JSON.stringify({
-      target,
-      url,
-      caption
+    body: new URLSearchParams({
+      target: target,
+      file: url,        // WAJIB: file
+      caption: caption
     })
   });
 }
