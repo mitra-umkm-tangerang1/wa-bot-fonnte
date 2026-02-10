@@ -300,7 +300,7 @@ async function kirimGambar(target,url,caption){
     },
     body:JSON.stringify({
       target,
-      file: url,
+      url,       // <- GANTI INI
       caption
     })
   });
