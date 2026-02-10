@@ -5,7 +5,7 @@ let users = {};
 const CS_NUMBER = "6285718539571";
 const PROFIT = 3000;
 const MAX_RETRY = 3;
-const RATE_LIMIT_MS = 5000; // anti spam waktu
+const RATE_LIMIT_MS = 5000;
 
 // ===== KATEGORI ECOMMERCE =====
 const CATEGORY_MAP = {
@@ -20,11 +20,10 @@ const CATEGORY_MAP = {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.send("OK");
 
-  const { sender, pesan, message } = req.body;
+  const { sender, pesan, message, url } = req.body;
   if (!sender) return res.json({ ok:true });
 
   const text = (pesan || message || "").toLowerCase().trim();
-  if (!text) return res.json({ ok:true });
 
   // ===== INIT USER =====
   if (!users[sender]) {
@@ -46,6 +45,38 @@ export default async function handler(req, res) {
     if (users[target]?.order) {
       await prosesDigiflazz(target);
     }
+    return res.json({ ok:true });
+  }
+
+  // ===== TOLAK CS =====
+  if (sender === CS_NUMBER && text.startsWith("#tolak")) {
+    const target = text.split(" ")[1];
+    if (users[target]) {
+      await kirim(target,"Pembayaran ditolak. Silakan hubungi CS.");
+      users[target] = { step:"idle", lastStep:null, lastReplyAt:0 };
+    }
+    return res.json({ ok:true });
+  }
+
+  // ===== TERIMA BUKTI PEMBAYARAN =====
+  if (users[sender].step === "menunggu_bukti" && url) {
+    await kirim(sender,"Bukti pembayaran diterima, menunggu verifikasi sistem");
+
+    await kirim(CS_NUMBER,
+`BUKTI PEMBAYARAN
+
+Dari: ${sender}
+Produk: ${users[sender].order.nama}
+Tujuan: ${users[sender].order.tujuan}
+
+Silakan cek bukti di chat ini.
+
+#approve ${sender}
+#tolak ${sender}`);
+
+    await kirimGambar(CS_NUMBER, url, "Bukti pembayaran dari pelanggan");
+
+    users[sender].step = "menunggu_verifikasi";
     return res.json({ ok:true });
   }
 
@@ -82,8 +113,7 @@ Silakan pilih layanan di bawah ini:
 4. E-Money
 5. Games
 
-*Ketik angka kategori untuk melanjutkan.*
-`);
+*Ketik angka kategori untuk melanjutkan.*`);
     return res.json({ ok:true });
   }
 
@@ -108,19 +138,6 @@ Silakan pilih layanan di bawah ini:
 
   // ===== VALIDASI TUJUAN =====
   if (users[sender].step === "input_tujuan") {
-    const k = users[sender].kategori;
-
-    const valid =
-      (["1","2","4"].includes(k) && /^[0-9]{8,15}$/.test(text.replace(/\D/g,""))) ||
-      (k === "3" && /^[0-9]{6,15}$/.test(text)) ||
-      (k === "5" && /^[0-9 ]{6,}$/.test(text));
-
-    if (!valid) {
-      users[sender].lastReplyAt = Date.now();
-      await kirim(sender, "Format salah. Ikuti petunjuk sebelumnya ya 🙏");
-      return res.json({ ok:true });
-    }
-
     users[sender].tujuan = text;
     users[sender].step = "pilih_produk";
     users[sender].lastStep = "input_tujuan";
@@ -143,29 +160,22 @@ list.slice(0,20).map((p,i)=>`${i+1}. ${p.nama} - Rp${p.hargaJual}`).join("\n")
     if (!p) return res.json({ ok:true });
 
     users[sender].order = { ...p, tujuan: users[sender].tujuan };
-    users[sender].step = "menunggu";
+    users[sender].step = "menunggu_bukti";
     users[sender].lastStep = "pilih_produk";
     users[sender].lastReplyAt = Date.now();
 
     await kirim(sender, invoicePembeli(users[sender].order));
 
-console.log("QRIS_IMAGE_URL =", process.env.QRIS_IMAGE_URL);
+    if (process.env.QRIS_IMAGE_URL) {
+      await new Promise(r => setTimeout(r,1500));
+      await kirimGambar(sender, process.env.QRIS_IMAGE_URL, "Scan QRIS untuk bayar");
+    }
 
-if (process.env.QRIS_IMAGE_URL) {
-  console.log("KIRIM QRIS DIMULAI");
-  await new Promise(r => setTimeout(r, 1500)); // penting
-  await kirimGambar(
-    sender,
-    process.env.QRIS_IMAGE_URL,
-    "Scan QRIS untuk bayar"
-  );
-  console.log("KIRIM QRIS SELESAI");
-} else {
-  console.log("QRIS_IMAGE_URL TIDAK ADA");
-}
+    await kirim(sender,"Setelah bayar, kirim *bukti pembayaran* di chat ini.");
 
-await kirim(CS_NUMBER, invoiceCS(sender, users[sender].order));
-return res.json({ ok:true });
+    await kirim(CS_NUMBER, invoiceCS(sender, users[sender].order));
+
+    return res.json({ ok:true });
   }
 
   return res.json({ ok:true });
@@ -195,7 +205,7 @@ async function getProdukDigiflazz(kategori, attempt = 1) {
       )
       .map(p=>({
         sku:p.buyer_sku_code,
-        nama: autoDetectLabel(p.product_name),
+        nama:p.product_name,
         hargaModal:p.price,
         hargaJual:p.price + PROFIT
       }));
@@ -204,19 +214,6 @@ async function getProdukDigiflazz(kategori, attempt = 1) {
     if (attempt < MAX_RETRY) return getProdukDigiflazz(kategori, attempt+1);
     return [];
   }
-}
-
-function autoDetectLabel(nama){
-  const n = nama.toUpperCase();
-  if (n.includes("TELKOMSEL")) return "Telkomsel - " + nama;
-  if (n.includes("INDOSAT")) return "Indosat - " + nama;
-  if (n.includes("XL")) return "XL - " + nama;
-  if (n.includes("AXIS")) return "Axis - " + nama;
-  if (n.includes("TRI") || n.includes("3 ")) return "Tri - " + nama;
-  if (n.includes("MOBILE LEGENDS")) return "ML - " + nama;
-  if (n.includes("FREE FIRE")) return "FF - " + nama;
-  if (n.includes("PUBG")) return "PUBG - " + nama;
-  return nama;
 }
 
 async function prosesDigiflazz(target, attempt = 1){
@@ -246,13 +243,13 @@ async function prosesDigiflazz(target, attempt = 1){
 
 // ================= TEMPLATE =================
 function strukPembeli(o, ref){
-return `STRUK PEMBAYARAN
+return `STRUK
 
 Produk: ${o.nama}
 Tujuan: ${o.tujuan}
 Ref: ${ref}
 
-Status: BERHASIL ✅`;
+Status: BERHASIL`;
 }
 
 function invoicePembeli(o){
@@ -263,11 +260,11 @@ Tujuan: ${o.tujuan}
 
 Total: Rp${o.hargaJual}
 
-Silakan lakukan pembayaran 🙏`;
+Silakan bayar via QRIS`;
 }
 
 function invoiceCS(sender,o){
-return `ORDER
+return `ORDER MASUK
 
 ${sender}
 ${o.nama}
@@ -276,7 +273,10 @@ Tujuan: ${o.tujuan}
 Modal: ${o.hargaModal}
 Jual: ${o.hargaJual}
 
-#approve ${sender}`;
+Menunggu bukti pembayaran
+
+#approve ${sender}
+#tolak ${sender}`;
 }
 
 // ================= SEND =================
@@ -300,7 +300,7 @@ async function kirimGambar(target,url,caption){
     },
     body:JSON.stringify({
       target,
-      url,       // <- GANTI INI
+      url,
       caption
     })
   });
