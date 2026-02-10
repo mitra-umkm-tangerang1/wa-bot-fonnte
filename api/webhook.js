@@ -287,6 +287,10 @@ async function kirimGambar(target,url,caption){
       Authorization:process.env.FONNTE_TOKEN,
       "Content-Type":"application/json"
     },
-    body:JSON.stringify({ target,url,caption })
+    body:JSON.stringify({
+      target,
+      file: url,
+      caption
+    })
   });
 }
