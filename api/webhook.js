@@ -164,17 +164,26 @@ list.slice(0,20).map((p,i)=>`${i+1}. ${p.nama} - Rp${p.hargaJual}`).join("\n")
     users[sender].lastStep = "pilih_produk";
     users[sender].lastReplyAt = Date.now();
 
-    await kirim(sender, invoicePembeli(users[sender].order));
+    // 1️⃣ Kirim invoice dulu
+await kirim(sender, invoicePembeli(users[sender].order));
 
-// DELAY 3 DETIK DI SINI
+// 2️⃣ Delay 3 detik (WAJIB)
 await new Promise(r => setTimeout(r, 3000));
 
+// 3️⃣ Kirim QRIS (media)
 if (process.env.QRIS_IMAGE_URL) {
-  await kirimGambar(sender, process.env.QRIS_IMAGE_URL, "Scan QRIS untuk bayar");
+  await kirimGambar(
+    sender,
+    process.env.QRIS_IMAGE_URL,
+    "Scan QRIS untuk bayar"
+  );
 }
 
-await kirim(sender,"Setelah bayar, kirim *bukti pembayaran* di chat ini.");
+// 4️⃣ Delay lagi 2 detik (ANTI silent-fail)
+await new Promise(r => setTimeout(r, 2000));
 
+// 5️⃣ Kirim instruksi & notifikasi CS
+await kirim(sender, "Setelah bayar, kirim *bukti pembayaran* di chat ini.");
 await kirim(CS_NUMBER, invoiceCS(sender, users[sender].order));
 
 return res.json({ ok:true });
@@ -293,28 +302,16 @@ async function kirim(target,message){
   });
 }
 
-async function kirimGambar(target, url, caption, attempt = 1){
-  try {
-
-    const form = new FormData();
-    form.append("target", target);
-    form.append("file", url);
-    form.append("caption", caption);
-
-    await fetch("https://api.fonnte.com/send",{
-      method:"POST",
-      headers:{
-        Authorization: process.env.FONNTE_TOKEN
-      },
-      body: form
-    });
-
-  } catch (e) {
-
-    if (attempt < 3) {
-      await new Promise(r => setTimeout(r, 2000));
-      return kirimGambar(target, url, caption, attempt + 1);
-    }
-
-  }
+async function kirimGambar(target, url, caption){
+  await fetch("https://api.fonnte.com/send",{
+    method: "POST",
+    headers: {
+      Authorization: process.env.FONNTE_TOKEN
+    },
+    body: new URLSearchParams({
+      target,
+      file: url,     // WAJIB pakai file
+      caption
+    })
+  });
 }
